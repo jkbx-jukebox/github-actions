@@ -6,7 +6,7 @@ This repository is managed by the JKBX Dev Team in order to provide Github Actio
 
 Here is an example of leveraging this resource from another repository. The `uses` keyword allows the external project to reference a specific implementation within this repository as well as feed in values from their own project, organization, etc. 
 
-File: `.github/workflows/ecs-production.yml`
+File: `.github/workflows/deploy.yml`
 ```yaml
 name: Deploy Container to AWS
 
