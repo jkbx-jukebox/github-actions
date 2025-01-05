@@ -1,0 +1,297 @@
+name: AWS ECS Production Deployment
+
+on:
+  workflow_call:
+    inputs:
+      account_number:
+        required: true
+        type: string
+      aws_default_region:
+        required: true
+        type: string
+      aws_ecr_repository_version:
+        required: true
+        type: string
+      dd_agent_major_version:
+        required: true
+        type: number
+      dd_apm_enabled:
+        required: true
+        type: boolean
+      dd_env:
+        required: true
+        type: string
+      dd_service:
+        required: true
+        type: string
+      dd_site:
+        required: true
+        type: string
+      ref_name:
+        required: true
+        type: string
+      repo_name:
+        required: true
+        type: string
+      sha:
+        required: true
+        type: string
+      tfc_org_name:
+        required: true
+        type: string
+      tfc_workspace_id:
+        required: true
+        type: string
+      tfc_workspace_name:
+        required: true
+        type: string
+    secrets:
+      AUTH0_CLIENT_ID:
+        required: true
+      AUTH0_CLIENT_SECRET:
+        required: true
+      AUTH0_DOMAIN:
+        required: true
+      BRASSICA_TOKEN:
+        required: true
+      BRASSICA_WEBHOOK_SHARED_SECRET:
+        required: true
+      CHARTMETRIC_HOST:
+        required: true
+      CHARTMETRIC_REFRESH_TOKEN:
+        required: true
+      DATABASE_URI:
+        required: true
+      DD_API_KEY:
+        required: true
+      ITERABLE_APIKEY:
+        required: true
+      JWT_SECRET_ID:
+        required: true
+      RDS_DATABASE_NAME:
+        required: true
+      RDS_MASTER_PASSWORD:
+        required: true
+      RDS_MASTER_USERNAME:
+        required: true
+      REPO_READER:
+        required: true
+      TERRAFORM_CLOUD_API_TOKEN:
+        required: true
+
+jobs:
+  ecs-deployment:
+    name: Deploy ECS to environment
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.ref_name }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Git checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          token: ${{ secrets.REPO_READER }}
+          fetch-depth: 0
+
+      - name: Clean submodule state (optional)
+        run: git submodule deinit -f . && git submodule update --init --recursive
+
+      - name: Get branch name
+        id: get-branch-name
+        run: |
+          echo "BRANCH_NAME=${GITHUB_REF##*/}" >> $GITHUB_ENV
+
+      - name: Configure AWS Credentials from particular AWS account
+        id: get-oidc-token
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ inputs.aws_default_region }}
+          role-session-name: ${{ inputs.sha }}
+          role-to-assume: "arn:aws:iam::${{ inputs.account_number }}:role/jkbx-backstage-github-oidc-${{ inputs.ref_name }}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push ECS image to Amazon ECR
+        id: build-ecs
+        if: ${{ inputs.ref_name }} == 'staging'
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: "ecs/${{ inputs.repo_name }}-${{ inputs.aws_ecr_repository_version }}"
+          IMAGE_TAG: ${{ inputs.sha }}
+        run: |
+          docker build \
+            --build-arg DD_AGENT_MAJOR_VERSION=${{ inputs.dd_agent_major_version }} \
+            --build-arg DD_API_KEY=${{ inputs.dd_apm_enabled }} \
+            --build-arg DD_APM_ENABLED=${{ inputs.dd_apm_enabled }} \
+            --build-arg DD_ENV=${{ inputs.dd_env }} \
+            --build-arg DD_SERVICE=${{ inputs.dd_service }} \
+            --build-arg DD_SITE=${{ inputs.dd_site }} \
+            -t $REGISTRY/$REPOSITORY:$IMAGE_TAG -f Dockerfile.ecs .
+          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+
+      - name: Trigger Terraform Cloud Run
+        id: trigger-terraform-run
+        if: success() && steps.build-ecs.outcome == 'success'
+        continue-on-error: true
+        run: |
+          RESPONSE=$(curl \
+            --header "Authorization: Bearer ${{ secrets.TERRAFORM_CLOUD_API_TOKEN }}" \
+            --header "Content-Type: application/vnd.api+json" \
+            --request POST \
+            --data '{
+              "data": {
+                "attributes": {
+                  "is-destroy": false,
+                  "message": "Deploy image tag: ecs/${{ inputs.repo_name }}:${{ inputs.sha }}"
+                },
+                "type": "runs",
+                "relationships": {
+                  "workspace": {
+                    "data": {
+                      "type": "workspaces",
+                      "id": "${{ inputs.tfc_workspace_id }}"
+                    }
+                  }
+                }
+              }
+            }' \
+            https://app.terraform.io/api/v2/runs)
+
+          echo "Terraform Cloud Run Response (Pretty):"
+          echo "$RESPONSE" | jq .
+
+  tfc-sensitive-variables:
+    name: Create workspace variables on Terraform Cloud
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref_name }}
+
+    steps:
+      - name: List and Parse Terraform Cloud Workspace Variables
+        id: list-tfc-variables
+        run: |
+          # Define the variable keys and corresponding environment variable names
+          declare -A TFC_VARS=(
+            ["TF_VAR_auth0_client_id"]="AUTH0_CLIENT_ID"
+            ["TF_VAR_auth0_client_secret"]="AUTH0_CLIENT_SECRET"
+            ["TF_VAR_auth0_domain"]="AUTH0_DOMAIN"
+            ["TF_VAR_brassica_token"]="BRASSICA_TOKEN"
+            ["TF_VAR_brassica_webhook_secret"]="BRASSICA_WEBHOOK_SHARED_SECRET"
+            ["TF_VAR_chartmetric_host"]="CHARTMETRIC_HOST"
+            ["TF_VAR_chartmetric_refresh_token"]="CHARTMETRIC_REFRESH_TOKEN"
+            ["TF_VAR_database_uri"]="DATABASE_URI"
+            ["TF_VAR_dd_api_key"]="DD_API_KEY"
+            ["TF_VAR_iterable_api_key"]="ITERABLE_APIKEY"
+            ["TF_VAR_jwt_secret_id"]="JWT_SECRET_ID"
+            ["TF_VAR_rds_database_name"]="RDS_DATABASE_NAME"
+            ["TF_VAR_rds_master_password"]="RDS_MASTER_PASSWORD"
+            ["TF_VAR_rds_master_username"]="RDS_MASTER_USERNAME"
+          )
+
+          # Fetch all variables from the Terraform Cloud API
+          response=$(curl --location "https://app.terraform.io/api/v2/vars?filter%5Borganization%5D%5Bname%5D=${{ inputs.tfc_org_name }}&filter%5Bworkspace%5D%5Bname%5D=${{ inputs.tfc_workspace_name }}" \
+            --silent \
+            --header "Authorization: Bearer ${{ secrets.TERRAFORM_CLOUD_API_TOKEN }}" \
+            --header "Content-Type: application/vnd.api+json")
+
+          # Parse and export variable IDs
+          for key in "${!TFC_VARS[@]}"; do
+            VAR_ID=$(echo "$response" | jq -r ".data[] | select(.attributes.key == \"$key\") | .id")
+            echo "${TFC_VARS[$key]}=$VAR_ID" >> $GITHUB_ENV
+          done
+
+      - name: Update Terraform Cloud Variables
+        run: |
+          declare -A TFC_VARS=(
+            ["AUTH0_CLIENT_ID"]="${{ secrets.AUTH0_CLIENT_ID }}"
+            ["AUTH0_CLIENT_SECRET"]="${{ secrets.AUTH0_CLIENT_SECRET }}"
+            ["AUTH0_DOMAIN"]="${{ secrets.AUTH0_DOMAIN }}"
+            ["BRASSICA_TOKEN"]="${{ secrets.BRASSICA_TOKEN }}"
+            ["BRASSICA_WEBHOOK_SHARED_SECRET"]="${{ secrets.BRASSICA_WEBHOOK_SHARED_SECRET }}"
+            ["CHARTMETRIC_HOST"]="${{ secrets.CHARTMETRIC_HOST }}"
+            ["CHARTMETRIC_REFRESH_TOKEN"]="${{ secrets.CHARTMETRIC_REFRESH_TOKEN }}"
+            ["DATABASE_URI"]="${{ secrets.DATABASE_URI }}"
+            ["DD_API_KEY"]="${{ secrets.DD_API_KEY }}"
+            ["ITERABLE_APIKEY"]="${{ secrets.ITERABLE_APIKEY }}"
+            ["JWT_SECRET_ID"]="${{ secrets.JWT_SECRET_ID }}"
+            ["RDS_DATABASE_NAME"]="${{ secrets.RDS_DATABASE_NAME }}"
+            ["RDS_MASTER_PASSWORD"]="${{ secrets.RDS_MASTER_PASSWORD }}"
+            ["RDS_MASTER_USERNAME"]="${{ secrets.RDS_MASTER_USERNAME }}"
+          )
+
+          # Initialize JSON object for the summary
+          SUMMARY_JSON="[]"
+
+          for key in "${!TFC_VARS[@]}"; do
+            VAR_ID=$(echo "$key")
+            VAR_VALUE="${TFC_VARS[$key]}"
+
+            if [[ -n "${!VAR_ID}" && -n "${VAR_VALUE}" ]]; then
+              RESPONSE=$(curl --silent --write-out "%{http_code}" --output /dev/null \
+                --header "Authorization: Bearer ${{ secrets.TERRAFORM_CLOUD_API_TOKEN }}" \
+                --header "Content-Type: application/vnd.api+json" \
+                --request PATCH \
+                --data "{
+                  \"data\": {
+                    \"id\": \"${!VAR_ID}\",
+                    \"attributes\": {
+                      \"value\": \"${VAR_VALUE}\"
+                    },
+                    \"type\": \"vars\"
+                  }
+                }" \
+                https://app.terraform.io/api/v2/vars/${!VAR_ID})
+
+              # Add to summary JSON based on response code
+              if [[ "$RESPONSE" == "200" ]]; then
+                SUMMARY_JSON=$(echo "$SUMMARY_JSON" | jq ". + [{\"key\": \"$key\", \"status\": \"success\", \"id\": \"${!VAR_ID}\"}]")
+              else
+                SUMMARY_JSON=$(echo "$SUMMARY_JSON" | jq ". + [{\"key\": \"$key\", \"status\": \"failed\", \"id\": \"${!VAR_ID}\"}]")
+              fi
+            else
+              echo "Skipping $key: ID or value is empty."
+            fi
+          done
+
+          # Pretty-print the summary
+          echo "Summary of updates:"
+          echo "$SUMMARY_JSON" | jq .
+
+      # - name: Create Terraform Cloud Workspace Variables
+      #   id: tfc-sensitive-variables
+      #   continue-on-error: true
+      #   run: |
+      #     curl \
+      #       --header "Authorization: Bearer ${{ secrets.TERRAFORM_CLOUD_API_TOKEN }}" \
+      #       --header "Content-Type: application/vnd.api+json" \
+      #       --request POST \
+      #       --data '{
+      #         "data": {
+      #           "type": "vars",
+      #           "attributes": {
+      #             "key": "TF_VAR_chartmetric_refresh_token",
+      #             "value": "${{ secrets.CHARTMETRIC_REFRESH_TOKEN }}",
+      #             "description": "Chartmetric Refresh Token",
+      #             "category": "env",
+      #             "sensitive": true
+      #           },
+      #           "relationships": {
+      #             "workspace": {
+      #               "data": {
+      #                 "type": "workspaces",
+      #                 "id": "ws-PDRmKgZ3c26yojkj"
+      #               }
+      #             }
+      #           }
+      #         }
+      #       }' \
+      #       https://app.terraform.io/api/v2/vars

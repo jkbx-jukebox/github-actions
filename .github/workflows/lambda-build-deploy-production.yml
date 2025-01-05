@@ -1,0 +1,85 @@
+name: AWS Lambda Production Deployment
+
+on:
+  workflow_call:
+    inputs:
+      account_number:
+        required: true
+        type: string
+      aws_default_region:
+        required: true
+        type: string
+      aws_ecr_repository_version:
+        required: true
+        type: string
+      repo_name:
+        required: true
+        type: string
+      ref_name:
+        required: true
+        type: string
+      sha:
+        required: true
+        type: string
+    secrets:
+      REPO_READER:
+        required: true
+      TERRAFORM_CLOUD_API_TOKEN:
+        required: true
+
+jobs:
+  lambda-deployment:
+    name: Deploy Lambda to production environment
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.ref_name }}
+    permissions:
+      contents: read
+      id-token: write
+    if: inputs.ref_name == 'production'
+
+    steps:
+      - name: Git checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+          fetch-depth: 0
+          token: ${{ secrets.REPO_READER }}
+
+      - name: Configure AWS Credentials from particular AWS account
+        id: get-oidc-token
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ inputs.aws_default_region }}
+          role-session-name: ${{ inputs.sha }}
+          role-to-assume: "arn:aws:iam::${{ inputs.account_number }}:role/jkbx-backstage-github-oidc-${{ inputs.ref_name }}"
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push Lambda image to Amazon ECR
+        id: build-lambda
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: ${{ inputs.repo_name }}-${{ inputs.aws_ecr_repository_version }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG -f Dockerfile.lambda .
+          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+
+      # - name: Check if Lambda Function Exists
+      #   id: check_lambda
+      #   run: |
+      #     if aws lambda get-function --function-name "${{ inputs.repo_name }}-${{ inputs.aws_ecr_repository_version }}-lambda-${{ inputs.ref_name }}-${{ inputs.aws_default_region }}" 2>/dev/null; then
+      #       echo "FUNCTION_EXISTS=true" >> $GITHUB_ENV
+      #     else
+      #       echo "FUNCTION_EXISTS=false" >> $GITHUB_ENV
+      #     fi
+
+      - name: Update Lambda Function if Exists
+        run: |
+          aws lambda update-function-code \
+            --function-name "${{ inputs.repo_name }}-${{ inputs.aws_ecr_repository_version }}-lambda-${{ inputs.ref_name }}-${{ inputs.aws_default_region }}" \
+            --image-uri ${{ steps.login-ecr.outputs.registry }}/${{ inputs.repo_name }}-${{ inputs.aws_ecr_repository_version }}:${{ inputs.sha }} \
+            --publish
