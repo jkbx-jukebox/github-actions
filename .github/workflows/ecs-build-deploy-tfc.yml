@@ -68,6 +68,10 @@ on:
         required: true
       JWT_SECRET_ID:
         required: true
+      PLAID_CLIENT_ID:
+        required: false
+      PLAID_SECRET:
+        required: false
       RDS_DATABASE_NAME:
         required: true
       RDS_MASTER_PASSWORD:
@@ -192,6 +196,8 @@ jobs:
             ["TF_VAR_dd_api_key"]="DD_API_KEY"
             ["TF_VAR_iterable_api_key"]="ITERABLE_APIKEY"
             ["TF_VAR_jwt_secret_id"]="JWT_SECRET_ID"
+            ["TF_VAR_plaid_client_id"]="PLAID_CLIENT_ID"
+            ["TF_VAR_plaid_secret"]="PLAID_SECRET"
             ["TF_VAR_rds_database_name"]="RDS_DATABASE_NAME"
             ["TF_VAR_rds_master_password"]="RDS_MASTER_PASSWORD"
             ["TF_VAR_rds_master_username"]="RDS_MASTER_USERNAME"
@@ -223,6 +229,8 @@ jobs:
             ["DD_API_KEY"]="${{ secrets.DD_API_KEY }}"
             ["ITERABLE_APIKEY"]="${{ secrets.ITERABLE_APIKEY }}"
             ["JWT_SECRET_ID"]="${{ secrets.JWT_SECRET_ID }}"
+            ["PLAID_CLIENT_ID"]="${{ secrets.PLAID_CLIENT_ID }}"
+            ["PLAID_SECRET"]="${{ secrets.PLAID_SECRET }}"
             ["RDS_DATABASE_NAME"]="${{ secrets.RDS_DATABASE_NAME }}"
             ["RDS_MASTER_PASSWORD"]="${{ secrets.RDS_MASTER_PASSWORD }}"
             ["RDS_MASTER_USERNAME"]="${{ secrets.RDS_MASTER_USERNAME }}"
