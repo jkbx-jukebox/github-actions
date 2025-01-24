@@ -46,11 +46,21 @@ on:
         required: true
         type: string
     secrets:
+      AMPLITUDE_API_KEY:
+        required: false
+      API_VERSION:
+        required: true
       AUTH0_CLIENT_ID:
         required: true
       AUTH0_CLIENT_SECRET:
         required: true
+      AUTH0_CONNECTION:
+        required: true
       AUTH0_DOMAIN:
+        required: true
+      BRASSICA_PLATFORM_SLUG:
+        required: true
+      BRASSICA_SERVER:
         required: true
       BRASSICA_TOKEN:
         required: true
@@ -62,13 +72,35 @@ on:
         required: true
       DATABASE_URI:
         required: true
+      DATADOG_SITE:
+        required: true
       DD_API_KEY:
+        required: true
+      DD_LOGS_ENABLED:
+        required: true
+      DD_MERGE_XRAY_TRACES:
+        required: true
+      DD_TRACE_ENABLED:
+        required: true
+      ENCRYPTION_KEY_ARN:
         required: true
       ITERABLE_APIKEY:
         required: true
+      ITERABLE_HOST:
+        required: true
+      JKBX_CONFIGURATION:
+        required: true
       JWT_SECRET_ID:
         required: true
+      LOG_LEVEL:
+        required: true
       PLAID_CLIENT_ID:
+        required: false
+      PLAID_ENVIRONMENT:
+        required: false
+      PLAID_REDIRECT_TEST:
+        required: false
+      PLAID_REDIRECT_URI:
         required: false
       PLAID_SECRET:
         required: false
@@ -80,6 +112,10 @@ on:
         required: true
       REPO_READER:
         required: true
+      REGION:
+        required: true
+      STATE_MACHINE_ARN:
+        required: false
       TERRAFORM_CLOUD_API_TOKEN:
         required: true
 
@@ -185,22 +221,40 @@ jobs:
         run: |
           # Define the variable keys and corresponding environment variable names
           declare -A TFC_VARS=(
+            ["TF_VAR_amplitude_api_key"]="AMPLITUDE_API_KEY"
+            ["TF_VAR_api_version"]="API_VERSION"
             ["TF_VAR_auth0_client_id"]="AUTH0_CLIENT_ID"
             ["TF_VAR_auth0_client_secret"]="AUTH0_CLIENT_SECRET"
+            ["TF_VAR_auth0_connection"]="AUTH0_CONNECTION"
             ["TF_VAR_auth0_domain"]="AUTH0_DOMAIN"
+            ["TF_VAR_brassica_platform_slug"]="BRASSICA_PLATFORM_SLUG"
+            ["TF_VAR_brassica_server"]="BRASSICA_SERVER"
             ["TF_VAR_brassica_token"]="BRASSICA_TOKEN"
             ["TF_VAR_brassica_webhook_secret"]="BRASSICA_WEBHOOK_SHARED_SECRET"
             ["TF_VAR_chartmetric_host"]="CHARTMETRIC_HOST"
             ["TF_VAR_chartmetric_refresh_token"]="CHARTMETRIC_REFRESH_TOKEN"
             ["TF_VAR_database_uri"]="DATABASE_URI"
+            ["TF_VAR_datadog_site"]="DATADOG_SITE"
             ["TF_VAR_dd_api_key"]="DD_API_KEY"
+            ["TF_VAR_dd_logs_enabled"]="DD_LOGS_ENABLED"
+            ["TF_VAR_dd_merge_xray_traces"]="DD_MERGE_XRAY_TRACES"
+            ["TF_VAR_dd_trace_enabled"]="DD_TRACE_ENABLED"
+            ["TF_VAR_encryption_key_arn"]="ENCRYPTION_KEY_ARN"
             ["TF_VAR_iterable_api_key"]="ITERABLE_APIKEY"
+            ["TF_VAR_iterable_host"]="ITERABLE_HOST"
+            ["TF_VAR_jkbx_configuration"]="JKBX_CONFIGURATION"
             ["TF_VAR_jwt_secret_id"]="JWT_SECRET_ID"
+            ["TF_VAR_log_level"]="LOG_LEVEL"
             ["TF_VAR_plaid_client_id"]="PLAID_CLIENT_ID"
+            ["TF_VAR_plaid_environment"]="PLAID_ENVIRONMENT"
+            ["TF_VAR_plaid_redirect_test"]="PLAID_REDIRECT_TEST"
+            ["TF_VAR_plaid_redirect_uri"]="PLAID_REDIRECT_URI"
             ["TF_VAR_plaid_secret"]="PLAID_SECRET"
             ["TF_VAR_rds_database_name"]="RDS_DATABASE_NAME"
             ["TF_VAR_rds_master_password"]="RDS_MASTER_PASSWORD"
             ["TF_VAR_rds_master_username"]="RDS_MASTER_USERNAME"
+            ["TF_VAR_region"]="REGION"
+            ["TF_VAR_state_machine_arn"]="STATE_MACHINE_ARN"
           )
 
           # Fetch all variables from the Terraform Cloud API
@@ -218,22 +272,40 @@ jobs:
       - name: Update Terraform Cloud Variables
         run: |
           declare -A TFC_VARS=(
+            ["AMPLITUDE_API_KEY"]="${{ secrets.AMPLITUDE_API_KEY }}"
+            ["API_VERSION"]="${{ secrets.API_VERSION }}"
             ["AUTH0_CLIENT_ID"]="${{ secrets.AUTH0_CLIENT_ID }}"
             ["AUTH0_CLIENT_SECRET"]="${{ secrets.AUTH0_CLIENT_SECRET }}"
+            ["AUTH0_CONNECTION"]="${{ secrets.AUTH0_CONNECTION }}"
             ["AUTH0_DOMAIN"]="${{ secrets.AUTH0_DOMAIN }}"
+            ["BRASSICA_PLATFORM_SLUG"]="${{ secrets.BRASSICA_PLATFORM_SLUG }}"
+            ["BRASSICA_SERVER"]="${{ secrets.BRASSICA_SERVER }}"
             ["BRASSICA_TOKEN"]="${{ secrets.BRASSICA_TOKEN }}"
             ["BRASSICA_WEBHOOK_SHARED_SECRET"]="${{ secrets.BRASSICA_WEBHOOK_SHARED_SECRET }}"
             ["CHARTMETRIC_HOST"]="${{ secrets.CHARTMETRIC_HOST }}"
             ["CHARTMETRIC_REFRESH_TOKEN"]="${{ secrets.CHARTMETRIC_REFRESH_TOKEN }}"
             ["DATABASE_URI"]="${{ secrets.DATABASE_URI }}"
+            ["DATADOG_SITE"]="${{ secrets.DATADOG_SITE }}"
             ["DD_API_KEY"]="${{ secrets.DD_API_KEY }}"
+            ["DD_LOGS_ENABLED"]="${{ secrets.DD_LOGS_ENABLED }}"
+            ["DD_MERGE_XRAY_TRACES"]="${{ secrets.DD_MERGE_XRAY_TRACES }}"
+            ["DD_TRACE_ENABLED"]="${{ secrets.DD_TRACE_ENABLED }}"
+            ["ENCRYPTION_KEY_ARN"]="${{ secrets.ENCRYPTION_KEY_ARN }}"
             ["ITERABLE_APIKEY"]="${{ secrets.ITERABLE_APIKEY }}"
+            ["ITERABLE_HOST"]="${{ secrets.ITERABLE_HOST }}"
+            ["JKBX_CONFIGURATION"]="${{ secrets.JKBX_CONFIGURATION }}"
             ["JWT_SECRET_ID"]="${{ secrets.JWT_SECRET_ID }}"
+            ["LOG_LEVEL"]="${{ secrets.LOG_LEVEL }}"
             ["PLAID_CLIENT_ID"]="${{ secrets.PLAID_CLIENT_ID }}"
+            ["PLAID_ENVIRONMENT"]="${{ secrets.PLAID_ENVIRONMENT }}"
+            ["PLAID_REDIRECT_URI"]="${{ secrets.PLAID_REDIRECT_URI }}"
+            ["PLAID_REDIRECT_TEST"]="${{ secrets.PLAID_REDIRECT_TEST }}"
             ["PLAID_SECRET"]="${{ secrets.PLAID_SECRET }}"
             ["RDS_DATABASE_NAME"]="${{ secrets.RDS_DATABASE_NAME }}"
             ["RDS_MASTER_PASSWORD"]="${{ secrets.RDS_MASTER_PASSWORD }}"
             ["RDS_MASTER_USERNAME"]="${{ secrets.RDS_MASTER_USERNAME }}"
+            ["REGION"]="${{ secrets.REGION }}"
+            ["STATE_MACHINE_ARN"]="${{ secrets.STATE_MACHINE_ARN }}"
           )
 
           # Initialize JSON object for the summary
