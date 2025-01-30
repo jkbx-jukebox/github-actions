@@ -77,7 +77,7 @@ on:
       DD_API_KEY:
         required: true
       DD_LOGS_ENABLED:
-        required: true
+        required: false
       DD_MERGE_XRAY_TRACES:
         required: true
       DD_TRACE_ENABLED:
