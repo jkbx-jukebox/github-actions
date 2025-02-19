@@ -160,23 +160,24 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push ECS image to Amazon ECR
+      - name: Build, tag, and push ECS image to Amazon ECR (with cache)
         id: build-ecs
         if: ${{ inputs.ref_name }} == 'staging'
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          REPOSITORY: "ecs/${{ inputs.repo_name }}-${{ inputs.aws_ecr_repository_version }}"
-          IMAGE_TAG: ${{ inputs.sha }}
-        run: |
-          docker build \
-            --build-arg DD_AGENT_MAJOR_VERSION=${{ inputs.dd_agent_major_version }} \
-            --build-arg DD_API_KEY=${{ inputs.dd_apm_enabled }} \
-            --build-arg DD_APM_ENABLED=${{ inputs.dd_apm_enabled }} \
-            --build-arg DD_ENV=${{ inputs.dd_env }} \
-            --build-arg DD_SERVICE=${{ inputs.dd_service }} \
-            --build-arg DD_SITE=${{ inputs.dd_site }} \
-            -t $REGISTRY/$REPOSITORY:$IMAGE_TAG -f Dockerfile.ecs .
-          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/ecs/${{ inputs.repo_name }}-${{ inputs.aws_ecr_repository_version }}:${{ inputs.sha }}
+          file: Dockerfile.ecs
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            DD_AGENT_MAJOR_VERSION=${{ inputs.dd_agent_major_version }}
+            DD_API_KEY=${{ inputs.dd_apm_enabled }}
+            DD_APM_ENABLED=${{ inputs.dd_apm_enabled }}
+            DD_ENV=${{ inputs.dd_env }}
+            DD_SERVICE=${{ inputs.dd_service }}
+            DD_SITE=${{ inputs.dd_site }}
 
       - name: Trigger Terraform Cloud Run
         id: trigger-terraform-run
