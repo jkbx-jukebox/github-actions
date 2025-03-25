@@ -41,10 +41,6 @@ jobs:
     steps:
       - name: Git checkout
         uses: actions/checkout@v3
-        with:
-          submodules: true
-          fetch-depth: 0
-          token: ${{ secrets.REPO_READER }}
 
       - name: Configure AWS Credentials from particular AWS account
         id: get-oidc-token
